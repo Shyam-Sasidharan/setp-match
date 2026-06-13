@@ -23,10 +23,8 @@
 /pnpm-debug.log*
 /public/build
 /public/hot
-/public/storage
 /storage/*.key
 /storage/pail
-/vendor
 /yarn-debug.log*
 /yarn-error.log*
 Homestead.json
