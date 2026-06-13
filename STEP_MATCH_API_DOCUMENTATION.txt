@@ -1,0 +1,1035 @@
+STEP MATCH API DOCUMENTATION
+============================
+
+Application: StepMatch
+Framework: Laravel 12
+Authentication: Laravel Sanctum Bearer tokens
+Documentation date: 2026-06-14
+
+
+1. BASE URL
+===========
+
+XAMPP subdirectory installation:
+
+https://stepmatch.axentriqinfosolutions.com/public/api
+
+Example:
+
+https://stepmatch.axentriqinfosolutions.com/public/api/login
+
+If the Laravel project is served with "php artisan serve":
+
+http://127.0.0.1:8000/api
+
+
+2. COMMON HEADERS
+=================
+
+Public JSON requests:
+
+Accept: application/json
+Content-Type: application/json
+
+Protected JSON requests:
+
+Accept: application/json
+Content-Type: application/json
+Authorization: Bearer TOKEN_HERE
+
+File upload requests must use form-data. Do not manually set Content-Type because
+Postman will generate the multipart boundary.
+
+
+3. COMMON RESPONSE FORMAT
+=========================
+
+Successful response:
+
+{
+    "status": true,
+    "message": "Operation completed successfully.",
+    "data": {}
+}
+
+Error response:
+
+{
+    "status": false,
+    "message": "Operation failed.",
+    "errors": {}
+}
+
+Validation error (HTTP 422):
+
+{
+    "status": false,
+    "message": "Validation failed",
+    "errors": {
+        "field": [
+            "Validation message."
+        ]
+    }
+}
+
+Common HTTP status codes:
+
+200 - Successful request
+201 - Resource created
+401 - Missing/invalid token or incorrect login credentials
+403 - Authenticated user does not own or cannot access the resource
+409 - Duplicate action or resource already processed
+422 - Validation or business rule failure
+
+
+4. AUTHENTICATION
+=================
+
+4.1 Register
+------------
+
+POST /register
+Authentication: Public
+
+JSON body:
+
+{
+    "name": "Shyam",
+    "email": "shyam@example.com",
+    "password": "password",
+    "password_confirmation": "password",
+    "device_name": "android-phone"
+}
+
+Validation:
+
+name                  required, string, maximum 255 characters
+email                 required, valid email, unique
+password              required, minimum 8 characters
+password_confirmation must match password
+device_name           optional, string, maximum 255 characters
+
+Returns HTTP 201 with:
+
+token
+token_type
+user
+profile
+credit_balance
+profile_completed
+fitness_connected
+
+
+4.2 Login
+---------
+
+POST /login
+Authentication: Public
+
+JSON body:
+
+{
+    "email": "shyam@example.com",
+    "password": "password",
+    "device_name": "android-phone"
+}
+
+Returns:
+
+{
+    "status": true,
+    "message": "Login successful.",
+    "data": {
+        "token": "SANCTUM_TOKEN",
+        "token_type": "Bearer",
+        "user": {},
+        "profile": {},
+        "credit_balance": 0,
+        "profile_completed": false,
+        "fitness_connected": false
+    }
+}
+
+Save data.token and send it in the Authorization header for protected routes.
+
+
+4.3 Logout
+----------
+
+POST /logout
+Authentication: Bearer token
+Body: none
+
+Deletes only the token used for the current request.
+
+
+5. PROFILE AND INTERESTS
+========================
+
+5.1 Get Current Profile
+-----------------------
+
+GET /profile
+Authentication: Bearer token
+
+Returns:
+
+user
+profile
+profile.photo_url
+profile.interests
+credit_balance
+profile_completed
+fitness_connected
+
+
+5.2 List Interests
+------------------
+
+GET /interests
+Authentication: Bearer token
+
+Returns active interests ordered by name:
+
+id
+name
+slug
+emoji
+
+Seeded interests:
+
+Trails, Coffee, HIIT, Running, Tech, Sunset, Gear, Fitness
+
+
+5.3 Set Up Profile
+------------------
+
+POST /profile/setup
+Authentication: Bearer token
+
+JSON body:
+
+{
+    "full_name": "Shyam",
+    "age": 24,
+    "gender": "male",
+    "bio": "Morning walker and trail runner.",
+    "walking_preferences": "Weekend trails and evening walks.",
+    "interests": [1, 2, 4],
+    "latitude": 17.385,
+    "longitude": 78.4867,
+    "city": "Hyderabad",
+    "state": "Telangana",
+    "country": "India",
+    "daily_step_goal": 10000
+}
+
+Validation:
+
+full_name          required, maximum 255 characters
+age                required, integer, 18 to 120
+gender             required: male, female, non_binary, other
+bio                optional, maximum 2000 characters
+walking_preferences optional, maximum 2000 characters
+interests          required array with at least one valid interest ID
+latitude           optional, -90 to 90
+longitude          optional, -180 to 180
+city/state/country optional, maximum 255 characters
+daily_step_goal    optional, integer, minimum 1
+
+This endpoint:
+
+- Creates or updates the user profile.
+- Synchronizes selected interests.
+- Sets profile_completed to true.
+- Creates a credit wallet if one does not exist.
+
+
+5.4 Update Profile
+------------------
+
+PUT /profile
+Authentication: Bearer token
+
+Send only fields that need to change.
+
+Example:
+
+{
+    "bio": "Updated walking bio.",
+    "daily_step_goal": 12000,
+    "interests": [1, 3, 4, 8]
+}
+
+The validation rules are the same as profile setup for submitted fields.
+
+
+5.5 Upload Profile Photo
+------------------------
+
+POST /profile/photo
+Authentication: Bearer token
+Body type: form-data
+
+Field:
+
+profile_photo = image file
+
+Maximum size: 5 MB
+
+Returns:
+
+profile_photo - storage path
+photo_url     - full public URL
+
+Run this once if public storage is not linked:
+
+php artisan storage:link
+
+
+6. FITNESS
+==========
+
+6.1 Connect Fitness Provider
+----------------------------
+
+POST /fitness/connect
+Authentication: Bearer token
+
+JSON body:
+
+{
+    "provider": "google_fit",
+    "provider_user_id": "provider-user-id",
+    "access_token": "optional-provider-token",
+    "refresh_token": "optional-refresh-token",
+    "token_expires_at": "2026-07-14 12:00:00",
+    "metadata": {
+        "device": "Android"
+    }
+}
+
+provider must be:
+
+google_fit
+apple_health
+
+This marks the profile as fitness_connected.
+
+
+6.2 Synchronize Daily Steps
+---------------------------
+
+POST /fitness/sync-steps
+Authentication: Bearer token
+
+JSON body:
+
+{
+    "provider": "google_fit",
+    "date": "2026-06-14",
+    "steps": 10000,
+    "goal_steps": 10000,
+    "distance_km": 7.8,
+    "calories": 520,
+    "heart_rate": 78,
+    "active_minutes": 90,
+    "source_data": {
+        "device": "Pixel"
+    }
+}
+
+Validation:
+
+provider       required: google_fit or apple_health
+date           required, YYYY-MM-DD
+steps          required integer, minimum 0
+goal_steps     required integer, minimum 1
+distance_km    optional numeric, minimum 0
+calories       optional numeric, minimum 0
+heart_rate     optional integer, 0 to 300
+active_minutes optional integer, minimum 0
+source_data    optional JSON object
+
+The record is created or updated by user and date.
+
+Credit rules:
+
+- Every 1000 new steps earns 5 credits.
+- Completing the daily goal earns a one-time 50-credit bonus.
+- Synchronizing the same data again does not duplicate credits.
+- If steps increase, only newly crossed 1000-step thresholds earn credits.
+
+Returns:
+
+daily_step_log
+today
+credits_earned
+credit_balance
+last_synced_at
+
+
+6.3 Today's Fitness Statistics
+------------------------------
+
+GET /fitness/today
+Authentication: Bearer token
+
+Returns:
+
+steps
+goal
+progress_percent
+streak
+distance
+calories
+avg_heart_rate
+active_minutes
+
+
+6.4 Weekly Fitness Statistics
+-----------------------------
+
+GET /fitness/weekly
+Authentication: Bearer token
+
+Returns totals for today and the previous six days:
+
+steps
+goal
+progress_percent
+streak
+distance
+calories
+avg_heart_rate
+active_minutes
+chart
+
+Each chart item contains:
+
+date
+day
+steps
+goal
+progress_percent
+
+
+7. CREDITS AND STEP BOOSTS
+==========================
+
+7.1 Credit Balance
+------------------
+
+GET /credits/balance
+Authentication: Bearer token
+
+Returns:
+
+{
+    "balance": 100
+}
+
+
+7.2 Credit Transactions
+-----------------------
+
+GET /credits/transactions?page=1
+Authentication: Bearer token
+
+Returns transactions with 20 records per page and pagination metadata.
+
+Transaction reasons may include:
+
+steps
+daily_goal
+super_like
+step_boost
+
+
+7.3 Apply Step Boost
+--------------------
+
+POST /steps/boost
+Authentication: Bearer token
+
+JSON body:
+
+{
+    "steps": 1200
+}
+
+Rules:
+
+- Only a 1200-step boost is supported.
+- Each boost costs 20 credits.
+- Maximum three boosts per calendar day.
+- The user must have enough credits.
+- Boosted steps are added to today's daily step log.
+
+Returns:
+
+boost
+boosts_used_today
+boosts_remaining_today
+credit_balance
+today
+
+
+8. HOME AND ACTIVITY
+====================
+
+8.1 Home Dashboard
+------------------
+
+GET /home
+Authentication: Bearer token
+
+Returns:
+
+subscription_plan
+today_steps
+daily_goal
+progress_percent
+daily_streak
+credit_balance
+mover_score
+weekly_progress
+featured_challenge
+nearby_walkers
+
+Featured challenge values:
+
+title             Complete 10,000 Steps Today
+reward_credits    50
+boost_steps       1200
+boost_credit_cost 20
+
+
+8.2 Activity Analytics
+----------------------
+
+GET /activity/analytics
+Authentication: Bearer token
+
+Returns:
+
+today_steps
+weekly_steps
+current_streak
+total_distance
+calories_burned
+avg_heart_rate
+active_hours
+weekly_chart
+badges
+
+
+9. DISCOVERY, SWIPES, AND MATCHES
+=================================
+
+9.1 Discovery
+-------------
+
+GET /discovery?page=1&per_page=10
+Authentication: Bearer token
+
+Query parameters:
+
+page     optional page number
+per_page optional, 1 to 50, default 10
+
+Discovery excludes:
+
+- The current user.
+- Users already liked, disliked, or super-liked.
+- Users already matched with the current user.
+- Users without a completed profile.
+
+Each user card contains:
+
+id
+name
+age
+profile_photo_url
+bio
+interests
+avg_steps
+distance
+match_percent
+is_verified
+
+distance is in kilometers and is null when coordinates are unavailable.
+
+
+9.2 Swipe
+---------
+
+POST /swipe
+Authentication: Bearer token
+
+JSON body:
+
+{
+    "target_user_id": 2,
+    "action": "like"
+}
+
+Supported actions:
+
+like
+dislike
+super_like
+
+Rules:
+
+- A user cannot swipe on themselves.
+- A user cannot swipe on the same target twice.
+- like and dislike are free.
+- super_like costs 25 credits.
+- A match is created when both users use like or super_like.
+- A conversation is automatically created after a match.
+
+Returns HTTP 201 with:
+
+action
+target_user_id
+credits_spent
+credit_balance
+is_match
+match
+
+When is_match is true, match contains:
+
+id
+match_percent
+matched_at
+conversation_id
+matched_user
+
+
+9.3 List Matches
+----------------
+
+GET /matches
+Authentication: Bearer token
+
+Returns active matches with:
+
+id
+match_percent
+status
+matched_at
+conversation_id
+user
+
+
+10. NOTIFICATIONS
+=================
+
+10.1 List Notifications
+-----------------------
+
+GET /notifications?page=1&per_page=20
+Authentication: Bearer token
+
+per_page may be 1 to 50.
+Dismissed notifications are excluded.
+
+Returns:
+
+notifications
+unread_count
+pagination
+
+Each notification contains:
+
+id
+type
+title
+message
+data
+is_read
+created_at
+time_ago
+
+Supported notification types:
+
+match
+challenge
+badge
+credits
+goal
+system
+
+
+10.2 Mark Notification as Read
+------------------------------
+
+POST /notifications/{notification_id}/read
+Authentication: Bearer token
+Body: none
+
+Users can only update their own notifications.
+
+
+10.3 Dismiss Notification
+-------------------------
+
+POST /notifications/{notification_id}/dismiss
+Authentication: Bearer token
+Body: none
+
+The notification remains in the database but is hidden from the notification list.
+
+
+10.4 Creating Notifications Internally
+--------------------------------------
+
+There is intentionally no mobile API endpoint for creating notifications.
+The backend creates notifications when application events occur.
+
+PHP example:
+
+use App\Models\AppNotification;
+use App\Models\User;
+
+$user = User::findOrFail(1);
+
+AppNotification::createFor(
+    user: $user,
+    type: 'system',
+    title: 'Welcome to StepMatch',
+    message: 'Your account is ready.',
+    data: ['screen' => 'home']
+);
+
+A challenge notification is automatically created by POST /challenges/invite.
+
+
+11. CHAT
+========
+
+Chat is available only for users in an active match conversation.
+
+
+11.1 List Chats
+---------------
+
+GET /chats
+Authentication: Bearer token
+
+Returns:
+
+id
+match_id
+match_percent
+participant
+last_message
+unread_count
+last_message_at
+
+
+11.2 List Conversation Messages
+-------------------------------
+
+GET /chats/{conversation_id}/messages?page=1&per_page=30
+Authentication: Bearer token
+
+per_page may be 1 to 100.
+Messages are ordered from oldest to newest.
+
+Each message contains:
+
+id
+conversation_id
+sender
+message_type
+message
+media_url
+audio_duration_seconds
+challenge
+metadata
+is_read
+created_at
+
+Supported message types:
+
+text
+audio
+system
+challenge
+
+
+11.3 Send Text Message
+----------------------
+
+POST /chats/{conversation_id}/messages
+Authentication: Bearer token
+
+JSON body:
+
+{
+    "message": "Would you like to walk this evening?"
+}
+
+message is required and may contain up to 2000 characters.
+
+
+11.4 Send Audio Message
+-----------------------
+
+POST /chats/{conversation_id}/audio
+Authentication: Bearer token
+Body type: form-data
+
+Fields:
+
+audio            required file: mp3, wav, m4a, or aac
+duration_seconds optional integer, 1 to 3600
+
+Maximum audio size: 10 MB
+
+The response includes media_url.
+
+
+11.5 Mark Conversation as Read
+------------------------------
+
+POST /chats/{conversation_id}/read
+Authentication: Bearer token
+Body: none
+
+Marks messages sent by other participants as read.
+
+
+12. WALKING CHALLENGES
+======================
+
+12.1 Invite Matched User
+------------------------
+
+POST /challenges/invite
+Authentication: Bearer token
+
+JSON body for steps:
+
+{
+    "opponent_id": 2,
+    "challenge_type": "steps",
+    "target_value": 10000,
+    "start_date": "2026-06-15",
+    "end_date": "2026-06-15",
+    "title": "10K Steps Together",
+    "description": "Complete 10,000 steps tomorrow."
+}
+
+JSON body for distance:
+
+{
+    "opponent_id": 2,
+    "challenge_type": "distance",
+    "target_value": 10,
+    "start_date": "2026-06-15",
+    "end_date": "2026-06-16"
+}
+
+Validation:
+
+opponent_id   required valid user; cannot be current user
+challenge_type required: steps or distance
+target_value  required numeric value greater than zero
+start_date    required and must be before or equal to end_date
+end_date      required and must be after or equal to start_date
+title         optional, maximum 255 characters
+description   optional, maximum 2000 characters
+
+Rules:
+
+- The opponent must be an active match.
+- Creates a pending walking challenge.
+- Creates a challenge message in the conversation.
+- Creates a notification for the opponent.
+
+Challenge statuses:
+
+pending
+accepted
+rejected
+completed
+expired
+
+
+12.2 Accept Challenge
+---------------------
+
+POST /challenges/{challenge_id}/accept
+Authentication: Bearer token
+Body: none
+
+Only the invited opponent can accept a pending challenge.
+
+
+12.3 Reject Challenge
+---------------------
+
+POST /challenges/{challenge_id}/reject
+Authentication: Bearer token
+Body: none
+
+Only the invited opponent can reject a pending challenge.
+
+
+13. SUBSCRIPTIONS
+=================
+
+13.1 Get Subscription
+---------------------
+
+GET /subscription
+Authentication: Bearer token
+
+Returns:
+
+current_plan
+membership_title
+features
+expiry
+subscription
+
+
+13.2 Change Demo Subscription
+-----------------------------
+
+POST /subscription/change-demo
+Authentication: Bearer token
+
+This development-only endpoint does not process payments.
+
+JSON body:
+
+{
+    "plan": "gold"
+}
+
+Optional testing fields:
+
+{
+    "plan": "premium",
+    "provider": "test-provider",
+    "provider_subscription_id": "test-subscription-123"
+}
+
+Supported plans:
+
+free
+gold
+premium
+
+Free features:
+
+- limited discovery
+- normal likes
+- limited boosts
+- no premium badge
+
+Gold features:
+
+- more discovery
+- more boosts
+- Gold Member badge
+- priority matching
+
+Premium features:
+
+- unlimited discovery
+- premium badge
+- priority matching
+- extra super likes
+
+Demo gold and premium subscriptions expire one month after the change.
+The free plan has no expiry.
+
+
+14. RECOMMENDED POSTMAN TESTING ORDER
+=====================================
+
+1.  POST /register
+2.  POST /login and save data.token
+3.  GET  /interests
+4.  POST /profile/setup
+5.  POST /profile/photo
+6.  POST /fitness/connect
+7.  POST /fitness/sync-steps
+8.  GET  /fitness/today
+9.  GET  /home
+10. GET  /discovery
+11. POST /swipe
+12. GET  /matches
+13. GET  /chats
+14. GET  /notifications
+15. GET  /activity/analytics
+16. GET  /credits/balance
+17. GET  /subscription
+18. POST /subscription/change-demo
+19. POST /logout
+
+
+15. DEMO ACCOUNTS
+=================
+
+Run:
+
+php artisan db:seed
+
+Seeded primary account:
+
+Email:    shyam@example.com
+Password: password
+Plan:     gold
+
+Other demo profiles include Jordan Vance and Marcus Chen.
+
+
+16. INSTALLATION AND CHECK COMMANDS
+===================================
+
+Run migrations:
+
+php artisan migrate
+
+Run seeders:
+
+php artisan db:seed
+
+Create public storage link:
+
+php artisan storage:link
+
+Clear Laravel caches:
+
+php artisan optimize:clear
+
+List API routes:
+
+php artisan route:list --path=api
+
+Run automated tests:
+
+php artisan test
+
+
+17. SECURITY NOTES
+==================
+
+- Never send Sanctum tokens in query parameters.
+- Store the mobile token securely.
+- Always use HTTPS in production.
+- Fitness provider access and refresh tokens are sensitive.
+- The demo subscription endpoint must be removed or disabled in production.
+- Users may only access their own notifications.
+- Users may only access conversations where they are active participants.
+- Chat and challenge operations require an active match.
+
+
+END OF DOCUMENTATION
+====================
